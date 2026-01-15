@@ -1,0 +1,72 @@
+org: ${env:SERVELESS_ORG}
+service: api-tts
+
+provider:
+  name: aws
+  profile: ${env:PROFILE_NAME}
+  runtime: python3.9
+  region: ${env:REGION}
+  environment:
+    DYNAMODB_TABLE: ${env:DYNAMODB_TABLE}
+    S3_BUCKET_NAME: ${env:S3_BUCKET_NAME}
+  httpApi:
+    cors: true
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:Scan
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+          Resource: "arn:aws:dynamodb:${aws:region}:*:table/${self:provider.environment.DYNAMODB_TABLE}"
+        - Effect: Allow
+          Action:
+            - polly:SynthesizeSpeech
+          Resource: "*"
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+            - s3:PutObjectAcl
+          Resource: "arn:aws:s3:::${self:provider.environment.S3_BUCKET_NAME}/*"
+
+functions:
+  health:
+    handler: Get_handler.health
+    events:
+      - httpApi:
+          path: /
+          method: get
+  
+  v1Description:
+    handler: Get_handler.v1_description
+    events:
+      - httpApi:
+          path: /v1
+          method: get
+
+  v1Tts:
+    handler: Post_handler.v1_tts
+    events:
+      - httpApi:
+          path: /v1/tts
+          method: post
+
+resources:
+  Resources:
+    TextToSpeechTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Retain
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
